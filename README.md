@@ -24,7 +24,7 @@ The script will allow you to convert your little BLE dongle into a fully configu
 Default Values:
  * -i hci0
    * HCI Device (as listed with _hciconfig -a_)
- * -u "0"
+ * -u 00000000-0000-0000-0000-000000000000
    * UUID will be left-padded with "0", and truncated to 32 chars. Illegal Characters will be ignored.
  * -M 0
    * Mayor value, specified in decimal. Never bigger than 65535 (0xFFFF)
@@ -35,6 +35,7 @@ Default Values:
 
 **Example:**
 ```bash
+
 # ./launch-ibeacon -i hci1 -u 01 -M 666 -M 333 -p "-59"
  · Setting up hci1 [leadv, noscan] ✓
  · Setting up beacon payload ✓
@@ -44,13 +45,15 @@ Default Values:
      POWER: C5 (-59)
  · Activating Beacon ✓
      hcitool -i hci1 cmd 0x08 0x0008 1E 02 01 1A 1A FF 4C 00 02 15 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 01 4D 00 00 C5 00
-     ```
+
+ ```
 
 
 ## ibeacon-scan
 This little script will allow you to listen to any ibeacon near you.
 
-The script is **heavily** based on iBeacon Scan by Radius Networks.
+The script is **heavily** based on [iBeacon Scan](http://developer.radiusnetworks.com/ibeacon/idk/ibeacon_scan) by Radius Networks.
+(Only a few changes made in order to allow specify HCI device)
 
 Usage:
 ```bash
