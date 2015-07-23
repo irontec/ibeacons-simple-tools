@@ -1,0 +1,140 @@
+#!/bin/bash
+
+HCI="hci0"
+
+UUID="0"
+MAYOR="0"
+MINOR="0"
+POWER="-59"
+
+while getopts ":i:m:M:u:p:h" opt; do
+  case $opt in
+    i)
+        HCI=$OPTARG
+      ;;
+    u)
+        # to upper
+        UUID=${OPTARG^^}
+      ;;
+    M)
+        MAYOR=$OPTARG
+      ;;
+    m)
+        MINOR=$OPTARG
+      ;;
+    p)
+        POWER=$OPTARG
+      ;;
+    h)
+      echo "Usage:"
+      echo "$0 -i hciN -u UUID -M MAYOR (decimal) -m MINOR (decimal) -p dBm"
+      exit 0
+      ;;
+    :)
+      echo "Option -$OPTARG requires an argument." >&2
+      exit 1
+      ;;
+  esac
+done
+
+
+
+UUID=${UUID//[^0-9A-F]/''}
+MAYOR=${MAYOR//[^0-9]/''}
+MINOR=${MINOR//[^0-9]/''}
+POWER=${POWER//[^\-0-9]/''}
+
+# Limitamos el UUID a los últimos 32 caracteres hexadecimales
+LEN=$(echo ${#UUID})
+if [ $LEN -gt 32 ]; then
+    UUID=${UUID:(-32)}
+fi
+
+# Hacemos left-pad con "0"
+# Preparamos para comando hcitool
+UUID=$(echo $UUID | sed -e :a -e 's/^.\{0,31\}$/0&/;ta' | sed 's/.\{2\}/& /g' | xargs)
+
+# Valor por defecto para mayor/minor = 0 (00 00)
+[[ -z "$MINOR" ]] && MINOR="0"
+[[ -z "$MAYOR" ]] && MAYOR="0"
+
+
+# Valor Máximo para mayor/minor = 65535 (FF FF)
+if [ $MAYOR -gt 65535 ]; then
+    MAYOR=65535
+fi
+
+if [ $MINOR -gt 65535 ]; then
+    MINOR=65535
+fi
+
+# Pasamos a hex
+# Preparamos para hcitool
+MAYORHEX=$(echo "obase=16; $MAYOR" | bc | sed -e :a -e 's/^.\{0,3\}$/0&/;ta' | sed 's/.\{2\}/& /g' | xargs)
+MINORHEX=$(echo "obase=16; $MINOR" | bc | sed -e :a -e 's/^.\{0,3\}$/0&/;ta' | sed 's/.\{2\}/& /g' | xargs)
+
+
+[[ -z "$POWER" ]] && POWER="-59"
+POWERHEX=$(echo "obase=16; $(( ~~ $(( 256 + $POWER)) ))" | bc)
+
+RED='\033[0;31m'
+LRED='\033[1;31m'
+LBLUE='\033[1;35m'
+LGREEN='\033[1;32m'
+LCYAN='\033[1;36m'
+LYELLOW='\033[1;33m'
+LBLUE='\033[1;34m'
+LMAGENTA='\033[1;35m'
+
+
+
+
+NC='\033[0m' # No Color
+
+echo -ne " ${LCYAN}·${NC} Setting up ${LGREEN}$HCI${NC} [leadv, noscan]"
+RET=$(hciconfig $HCI up 2>&1 && hciconfig $HCI noleadv 2>&1 && hciconfig $HCI leadv 3 2>&1 && hciconfig $HCI noscan 2>&1)
+if [ $? -ne 0 ]; then
+    echo -e " ${LRED}\u2716${NC}"
+    echo -e "\t[${LYELLOW}$RET${NC}]"
+    echo
+    exit 1
+fi
+
+echo -e " ${LGREEN}\u2713${NC}"
+
+
+echo -e " ${LCYAN}·${NC} Setting up beacon ${LBLUE}payload${NC} ${LGREEN}\u2713${NC}"
+echo -e "     UUID: ${LRED}$UUID${NC}"
+echo -e "     MAYOR: ${LBLUE}$MAYORHEX${NC} (${RED}$MAYOR${NC})"
+echo -e "     MINOR: ${LMAGENTA}$MINORHEX${NC} (${RED}$MINOR${NC})"
+echo -e "     POWER: ${LYELLOW}$POWERHEX${NC} (${RED}$POWER${NC})"
+
+#Apple 0x004c (Little Endian)
+MANUFACTURER="4C 00"
+
+#0x02 iBeacon
+DATATYPE="02"
+
+#0x15 > 21
+LENGTH="15"
+
+
+echo -ne " ${LCYAN}·${NC} Activating Beacon";
+COLORED_COMMAND="hcitool -i ${LGREEN}$HCI${NC} cmd 0x08 0x0008 1E 02 01 1A 1A FF $MANUFACTURER $DATATYPE $LENGTH ${LRED}$UUID${NC} ${LBLUE}$MAYORHEX${NC} ${LMAGENTA}$MINORHEX${NC} ${LYELLOW}$POWERHEX 00${NC}"
+
+COMMAND=$(echo $COLORED_COMMAND | sed -r "s/\\\\033\[[0-9;]*[JKmsu]//g")
+
+
+RET=$($COMMAND >  /dev/null 2>&1)
+if [ $? -ne 0 ]; then
+    echo -e " ${LRED}\u2716${NC}"
+    echo -e "\t[${LYELLOW}$RET${NC}]"
+    echo
+    exit 1
+fi
+
+echo -e " ${LGREEN}\u2713${NC}"
+
+echo -e "     $COLORED_COMMAND"
+
+
